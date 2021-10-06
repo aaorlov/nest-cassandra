@@ -1,0 +1,84 @@
+#!/bin/bash
+
+# define fonts
+bold=$(tput bold)
+dim=$(tput dim)
+normal=$(tput sgr0)
+cyan=$'\e[94m'
+red=$'\e[1;31m'
+green=$'\e[92m'
+
+if [[ $@ = *--rebuild* ]]; then
+  export REBUILD=true
+fi
+
+if [[ $@ = *--dev* ]]; then
+  export CONTAINER_CMD="tail -F /none"
+fi
+
+docker_compose_proxy () {
+  if [ -z "$2" ]; then
+    echo "${red}[!] Container name(s) were not specified${normal}"
+    echo
+    help
+    exit 1
+  fi
+
+  # create docker network in which all our services will be running
+  if [[ $1 = up ]] && ! (docker network ls | grep -q " cassandra "); then
+    docker network create cassandra && echo OK
+  fi
+
+  names="$2"
+  if [[ $names = all ]]; then
+    names=$(ls -a | grep docker-compose | awk -F'.' '{print $2}')
+  fi
+
+  name_array=$(echo "$names" | tr "," "\n")
+  for group_name in $name_array
+  do
+    cmd=$1
+    if [[ $1 = up ]]; then
+      cmd="up -d"
+      if [[ $REBUILD = true ]]; then cmd="$cmd --build"; fi
+    fi
+
+    echo "[ ${cyan}$group_name${normal} ]"
+    docker-compose -f docker-compose.$group_name.yml $cmd
+    echo
+  done
+  export CONTAINER_CMD=
+}
+
+enter_shell () {
+  if [ -z $2 ]; then
+    echo "${red}[!] Container name(s) were not specified${normal}"
+    echo
+    help
+    exit 1
+  fi
+
+  cmd=bash
+  if [[ $2 = client ]]; then cmd="sh"; fi
+
+  case "$2" in
+    *) exec docker exec -it $2 $cmd ;;
+  esac
+}
+
+main () {
+  case "$1" in
+    up | down | restart | build | pull | config | logs | ps) docker_compose_proxy $@ ;;
+    sh) enter_shell $@ ;;
+    *)
+      echo "${red}[!] Unrecognized command '${1}'${normal}"
+      exit 1
+      ;;
+  esac
+}
+
+if [ $# -eq 0 ]; then
+  help
+else
+  main $@
+fi

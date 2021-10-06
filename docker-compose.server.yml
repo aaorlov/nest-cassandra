@@ -10,7 +10,7 @@ services:
       - ./server:/usr/src/app
     ports:
       - 8000:${PORT}
-    command: "tail -F /none"
+    command: ${CONTAINER_CMD:-npm run start:dev}
     tty: true
     env_file:
       - .env
